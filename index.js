@@ -5,7 +5,7 @@ import fs from "node:fs";
 import fsPromises from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { exec as execAsync, execSync } from "node:child_process";
+import { exec as execAsync } from "node:child_process";
 
 const exec = promisify(execAsync);
 const app = express(); // 只填写UPLOAD_URL将上传节点,同时填写UPLOAD_URL和PROJECT_URL将上传订阅
@@ -117,6 +117,48 @@ function cleanupOldFiles() {
 app.get("/", function (req, res) {
   res.send("Hello world!");
 });
+
+// 预先注册订阅路由，返回默认内容或最新内容
+app.get(`/${SUB_PATH}`, (req, res) => {
+  let subContent;
+
+  if (latestSubContent) {
+    // 使用最新生成的内容
+    subContent = latestSubContent;
+  } else {
+    // 使用默认内容
+    subContent = `
+vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${ARGO_DOMAIN}&fp=firefox&type=ws&host=${ARGO_DOMAIN}&path=%2Fvless-argo%3Fed%3D2560#${NAME}
+
+vmess://${Buffer.from(JSON.stringify({
+  v: "2",
+  ps: `${NAME}`,
+  add: CFIP,
+  port: CFPORT,
+  id: UUID,
+  aid: "0",
+  scy: "none",
+  net: "ws",
+  type: "none",
+  host: ARGO_DOMAIN,
+  path: "/vmess-argo?ed=2560",
+  tls: "tls",
+  sni: ARGO_DOMAIN,
+  alpn: "",
+  fp: "firefox",
+})).toString("base64")}
+
+trojan://${UUID}@${CFIP}:${CFPORT}?security=tls&sni=${ARGO_DOMAIN}&fp=firefox&type=ws&host=${ARGO_DOMAIN}&path=%2Ftrojan-argo%3Fed%3D2560#${NAME}
+    `;
+  }
+
+  const encodedContent = Buffer.from(subContent.trim()).toString("base64");
+  res.set("Content-Type", "text/plain; charset=utf-8");
+  res.send(encodedContent);
+});
+
+// 全局变量存储最新订阅内容
+let latestSubContent = null;
 
 // 生成xr-ay配置文件
 async function generateConfig() {
@@ -544,11 +586,31 @@ async function extractDomains() {
 
   // 生成 list 和 sub 信息
   async function generateLinks(argoDomain) {
-    const metaInfo = execSync(
-      "curl -sm 5 https://speed.cloudflare.com/meta | awk -F\\\" '{print $26\"-\"$18}' | sed -e 's/ /_/g'",
-      { encoding: "utf-8" }
-    );
-    const ISP = metaInfo.trim();
+    let ISP = "Unknown-Unknown";
+    try {
+      // 获取 Cloudflare 元信息
+      const response = await axios.get("https://speed.cloudflare.com/meta", {
+        timeout: 5000
+      });
+      const data = response.data;
+
+      // 确保 data 是字符串
+      const dataStr = typeof data === 'string' ? data : JSON.stringify(data);
+
+      // 解析数据获取 ISP 和地区信息
+      // 查找 colo 和 organization 字段
+      const coloMatch = dataStr.match(/"colo":\s*"([^"]+)"/);
+      const orgMatch = dataStr.match(/"organization":\s*"([^"]+)"/);
+
+      const colo = coloMatch ? coloMatch[1] : "Unknown";
+      const org = orgMatch ? orgMatch[1] : "Unknown";
+
+      // 清理并格式化名称
+      ISP = `${org}-${colo}`.replace(/\s+/g, '_');
+    } catch (error) {
+      console.warn("Failed to get ISP info, using default:", error.message);
+    }
+
     // 如果 NAME 为空，则只使用 ISP 作为名称
     const nodeName = NAME ? `${NAME}-${ISP}` : ISP;
 
@@ -582,13 +644,11 @@ trojan://${UUID}@${CFIP}:${CFPORT}?security=tls&sni=${argoDomain}&fp=firefox&typ
         console.log(Buffer.from(subTxt).toString("base64"));
         fs.writeFileSync(subPath, Buffer.from(subTxt).toString("base64"));
         console.log(`${FILE_PATH}/sub.txt saved successfully`);
+
+        // 更新全局订阅内容
+        latestSubContent = subTxt;
+
         uploadNodes();
-        // 将内容进行 base64 编码并写入 SUB_PATH 路由
-        app.get(`/${SUB_PATH}`, (req, res) => {
-          const encodedContent = Buffer.from(subTxt).toString("base64");
-          res.set("Content-Type", "text/plain; charset=utf-8");
-          res.send(encodedContent);
-        });
         resolve(subTxt);
       }, 2000);
     });
