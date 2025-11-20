@@ -1,21 +1,23 @@
 {
-  "name": "nodejs-argo",
-  "version": "1,0,0",
-  "description": "Thsi is a node project",
-  "main": "index.js",
-  "author": "eooce",
-  "repository": "",
-  "license": "MIT",
-  "private": false,
+  "name": "vless-proxy-server",
+  "version": "1.0.0",
+  "description": "VLESS proxy server with tunnel management",
+  "type": "module",
+  "main": "worker.js",
   "scripts": {
-    "dev": "node index.js",
-    "start": "node index.js"
+    "start": "node worker.js",
+    "dev": "node --watch worker.js"
   },
   "dependencies": {
-    "axios": "latest",
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "axios": "^1.6.0"
   },
-  "engines": {
-    "node": ">=14"
-  }
+  "keywords": [
+    "vless",
+    "proxy",
+    "tunnel",
+    "cloudflare"
+  ],
+  "author": "",
+  "license": "MIT"
 }
