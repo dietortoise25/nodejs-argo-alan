@@ -6,27 +6,36 @@ import fsPromises from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { exec as execAsync } from "node:child_process";
+import dotenv from "dotenv";
+
+// 加载环境变量
+dotenv.config();
 
 const exec = promisify(execAsync);
 const app = express(); // 只填写UPLOAD_URL将上传节点,同时填写UPLOAD_URL和PROJECT_URL将上传订阅
+
+// 配置变量（优先使用环境变量，否则使用默认值）
 const UPLOAD_URL = process.env.UPLOAD_URL || ""; // 节点或订阅自动上传地址,需填写部署Merge-sub项目后的首页地址,例如：https://merge.xxx.com
 const PROJECT_URL = process.env.PROJECT_URL || ""; // 需要上传订阅或保活时需填写项目分配的url,例如：https://google.com
-const AUTO_ACCESS = process.env.AUTO_ACCESS || false; // false关闭自动保活，true开启,需同时填写PROJECT_URL变量
+const AUTO_ACCESS = process.env.AUTO_ACCESS === "true"; // false关闭自动保活，true开启,需同时填写PROJECT_URL变量
 const FILE_PATH = process.env.FILE_PATH || "./tmp"; // 运行目录,sub节点文件保存目录
 const SUB_PATH = process.env.SUB_PATH || "9983"; // 订阅路径
 const PORT = process.env.SERVER_PORT || process.env.PORT || 3000; // http服务订阅端口
-const UUID = process.env.UUID || "c5a61f46-45b0-4f85-a69c-a61f9d49b438"; // 使用哪吒v1,在不同的平台运行需修改UUID,否则会覆盖
+const UUID = process.env.UUID; // 使用哪吒v1,在不同的平台运行需修改UUID,否则会覆盖
 const NEZHA_SERVER = process.env.NEZHA_SERVER || ""; // 哪吒v1填写形式: nz.abc.com:8008  哪吒v0填写形式：nz.abc.com
 const NEZHA_PORT = process.env.NEZHA_PORT || ""; // 使用哪吒v1请留空，哪吒v0需填写
 const NEZHA_KEY = process.env.NEZHA_KEY || ""; // 哪吒v1的NZ_CLIENT_SECRET或哪吒v0的agent密钥
 const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "vless.156725927.xyz"; // 固定隧道域名,留空即启用临时隧道
-const ARGO_AUTH =
-  process.env.ARGO_AUTH ||
-  "eyJhIjoiYWE1ZjQyMGNhZjkzOGViYWRlODhkOTlmNmYxMDVkZTAiLCJ0IjoiZTgxMzk2OTEtZTMwMC00Y2RiLTg1MGYtZWQ1NzMwMzcwMTdlIiwicyI6Ik5URXpZemt3TW1VdE1USXlPQzAwTkdVNUxUZ3lNakV0WmpSbU1qVmpOakprTm1NMiJ9"; // 固定隧道密钥json或token,留空即启用临时隧道,json获取地址：https://json.zone.id
-const ARGO_PORT = process.env.ARGO_PORT || 8001; // 固定隧道端口,使用token需在cloudflare后台设置和这里一致
+const ARGO_AUTH = process.env.ARGO_AUTH; // 固定隧道密钥json或token,留空即启用临时隧道,json获取地址：https://json.zone.id
+const ARGO_PORT = parseInt(process.env.ARGO_PORT) || 8001; // 固定隧道端口,使用token需在cloudflare后台设置和这里一致
 const CFIP = process.env.CFIP || "cdns.doon.eu.org"; // 节点优选域名或优选ip
-const CFPORT = process.env.CFPORT || 443; // 节点优选域名或优选ip对应的端口
+const CFPORT = parseInt(process.env.CFPORT) || 443; // 节点优选域名或优选ip对应的端口
 const NAME = process.env.NAME || "alan-vless-2025"; // 节点名称
+
+// 验证必需的配置
+if (!UUID) {
+  throw new Error("UUID is required. Please set UUID in .env file");
+}
 
 // 创建运行文件夹
 if (!fs.existsSync(FILE_PATH)) {
@@ -130,23 +139,25 @@ app.get(`/${SUB_PATH}`, (req, res) => {
     subContent = `
 vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${ARGO_DOMAIN}&fp=firefox&type=ws&host=${ARGO_DOMAIN}&path=%2Fvless-argo%3Fed%3D2560#${NAME}
 
-vmess://${Buffer.from(JSON.stringify({
-  v: "2",
-  ps: `${NAME}`,
-  add: CFIP,
-  port: CFPORT,
-  id: UUID,
-  aid: "0",
-  scy: "none",
-  net: "ws",
-  type: "none",
-  host: ARGO_DOMAIN,
-  path: "/vmess-argo?ed=2560",
-  tls: "tls",
-  sni: ARGO_DOMAIN,
-  alpn: "",
-  fp: "firefox",
-})).toString("base64")}
+vmess://${Buffer.from(
+      JSON.stringify({
+        v: "2",
+        ps: `${NAME}`,
+        add: CFIP,
+        port: CFPORT,
+        id: UUID,
+        aid: "0",
+        scy: "none",
+        net: "ws",
+        type: "none",
+        host: ARGO_DOMAIN,
+        path: "/vmess-argo?ed=2560",
+        tls: "tls",
+        sni: ARGO_DOMAIN,
+        alpn: "",
+        fp: "firefox",
+      })
+    ).toString("base64")}
 
 trojan://${UUID}@${CFIP}:${CFPORT}?security=tls&sni=${ARGO_DOMAIN}&fp=firefox&type=ws&host=${ARGO_DOMAIN}&path=%2Ftrojan-argo%3Fed%3D2560#${NAME}
     `;
@@ -590,12 +601,12 @@ async function extractDomains() {
     try {
       // 获取 Cloudflare 元信息
       const response = await axios.get("https://speed.cloudflare.com/meta", {
-        timeout: 5000
+        timeout: 5000,
       });
       const data = response.data;
 
       // 确保 data 是字符串
-      const dataStr = typeof data === 'string' ? data : JSON.stringify(data);
+      const dataStr = typeof data === "string" ? data : JSON.stringify(data);
 
       // 解析数据获取 ISP 和地区信息
       // 查找 colo 和 organization 字段
@@ -606,7 +617,7 @@ async function extractDomains() {
       const org = orgMatch ? orgMatch[1] : "Unknown";
 
       // 清理并格式化名称
-      ISP = `${org}-${colo}`.replace(/\s+/g, '_');
+      ISP = `${org}-${colo}`.replace(/\s+/g, "_");
     } catch (error) {
       console.warn("Failed to get ISP info, using default:", error.message);
     }
