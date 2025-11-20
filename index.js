@@ -1,11 +1,11 @@
 import express from "express";
 import axios from "axios";
-import os from "os";
-import fs from "fs";
-import fsPromises from "fs/promises";
-import path from "path";
-import { promisify } from "util";
-import { exec as execAsync, execSync } from "child_process";
+import os from "node:os";
+import fs from "node:fs";
+import fsPromises from "node:fs/promises";
+import path from "node:path";
+import { promisify } from "node:util";
+import { exec as execAsync, execSync } from "node:child_process";
 
 const exec = promisify(execAsync);
 const app = express(); // 只填写UPLOAD_URL将上传节点,同时填写UPLOAD_URL和PROJECT_URL将上传订阅
